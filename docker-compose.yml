@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: exitwise_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: exitwisedb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: exitwise_backend
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=password
+      - DB_NAME=exitwisedb
+      - AI_SERVICE_URL=http://ai_service:8000
+    depends_on:
+      - db
+      - ai_service
+
+  ai_service:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    container_name: exitwise_ai_service
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+
+volumes:
+  postgres_data:

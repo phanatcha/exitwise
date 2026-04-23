@@ -28,7 +28,7 @@ type TabKey = 'map' | 'planner' | 'savePlan';
 // ─── API ─────────────────────────────────────────────────
 const api = {
   getTrips: async (): Promise<Trip[]> => {
-    const res = await fetch(`${BASE_URL}/trips`);
+    const res = await fetch(`${BASE_URL}/trips + `);
     if (!res.ok) throw new Error('Failed to fetch trips');
     return res.json();
   },

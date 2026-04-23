@@ -25,7 +25,7 @@ export const LoginScreen = ({ navigation }: any) => {
         const data = await response.json();
 
         if (response.ok) {
-        // login สำเร็จ → ไปหน้า MainTabs
+        // login สำเร็จ → ไปหน้า Map
         navigation.navigate('MainTabs');
         } else {
         // login ไม่สำเร็จ → แสดง error

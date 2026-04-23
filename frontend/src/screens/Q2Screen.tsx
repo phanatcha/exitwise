@@ -24,7 +24,7 @@ export const Q2 = ({ navigation, route }: any) => {
       });
 
       if (response.ok) {
-        navigation.navigate('MainTabs');
+        navigation.navigate('Map');
       } else {
         alert('Failed to save profile');
       }

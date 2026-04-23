@@ -2,16 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
   Dimensions,
-  FlatList,
 } from 'react-native';
 import MapboxGL from '@rnmapbox/maps';
 
-MapboxGL.setAccessToken('pk.eyJ1IjoiYnRwdW5jaHkiLCJhIjoiY21vOHh1Z21kMDRnczJxcjBqdG5iM2t0YSJ9.3IT3LGblDnR8m9JU5iCt7g');
+MapboxGL.setAccessToken('YOUR_MAPBOX_TOKEN');
 
 const BASE_URL = 'http://localhost:8080';
 const { width } = Dimensions.get('window');
@@ -25,24 +23,20 @@ type Station = {
   lng: number;
 };
 
-type Exit = {
-  id: number;
-  station_id: number;
-  exit_number: string;
-  description: string;
-  lat: number;
-  lng: number;
+// สีแต่ละสาย
+const LINE_COLORS: Record<string, string> = {
+  'MRT Blue': '#0101A5',
+  'MRT Purple': '#7B2D8B',
+  'BTS Sukhumvit': '#009945',
+  'BTS Silom': '#78BE20',
 };
 
 export const MapScreen = ({ navigation }: any) => {
   const [stations, setStations] = useState<Station[]>([]);
-  const [search, setSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
-  const [exits, setExits] = useState<Exit[]>([]);
+  const [exits, setExits] = useState<any[]>([]);
   const cameraRef = useRef<MapboxGL.Camera>(null);
 
-  // ดึง station ทั้งหมดตอนโหลด
   useEffect(() => {
     fetchStations();
   }, []);
@@ -57,63 +51,70 @@ export const MapScreen = ({ navigation }: any) => {
     }
   };
 
-  // search station
-  const handleSearch = async (text: string) => {
-    setSearch(text);
-    if (text.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    try {
-      const res = await fetch(`${BASE_URL}/stations?q=${text}`);
-      const data = await res.json();
-      setSearchResults(data.stations || []);
-    } catch (error) {
-      console.error('Search failed:', error);
-    }
-  };
-
-  // เลือก station จาก search
-  const handleSelectStation = (station: Station) => {
-    setSelectedStation(station);
-    setSearch(station.name_en);
-    setSearchResults([]);
-    fetchExits(station.id);
-    // ย้าย camera ไปที่ station
-    cameraRef.current?.setCamera({
-      centerCoordinate: [station.lng, station.lat],
-      zoomLevel: 15,
-      animationDuration: 1000,
-    });
-  };
-
-  // ดึง exits ของ station
   const fetchExits = async (stationId: number) => {
     try {
       const res = await fetch(`${BASE_URL}/station-exits?station_id=${stationId}`);
       const data = await res.json();
       setExits(data.exits || []);
-    } catch (error) {
-      console.error('Failed to fetch exits:', error);
+    } catch {
+      setExits([]);
     }
   };
 
-  // กด station บน map
   const handleStationPress = (station: Station) => {
     setSelectedStation(station);
     fetchExits(station.id);
+    cameraRef.current?.setCamera({
+      centerCoordinate: [station.lng, station.lat],
+      zoomLevel: 15,
+      animationDuration: 800,
+    });
   };
+
+  // จัดกลุ่ม stations ตามสาย
+  const groupedByLine = stations.reduce<Record<string, Station[]>>((acc, s) => {
+    if (!acc[s.line]) acc[s.line] = [];
+    acc[s.line].push(s);
+    return acc;
+  }, {});
+
+  // แปลงแต่ละสายเป็น GeoJSON LineString
+  const lineGeoJSON = (stationList: Station[]): GeoJSON.Feature => ({
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'LineString',
+      coordinates: stationList.map(s => [s.lng, s.lat]),
+    },
+  });
 
   return (
     <SafeAreaView style={styles.container}>
-
-      {/* Map */}
       <MapboxGL.MapView style={styles.map}>
         <MapboxGL.Camera
           ref={cameraRef}
           zoomLevel={12}
-          centerCoordinate={[100.5018, 13.7563]} // กรุงเทพ
+          centerCoordinate={[100.5018, 13.7563]}
         />
+
+        
+        {Object.entries(groupedByLine).map(([line, stationList]) => (
+          <MapboxGL.ShapeSource
+            key={`line-${line}`}
+            id={`line-${line}`}
+            shape={lineGeoJSON(stationList)}
+          >
+            <MapboxGL.LineLayer
+              id={`layer-${line}`}
+              style={{
+                lineColor: LINE_COLORS[line] ?? '#888888',
+                lineWidth: 4,
+                lineJoin: 'round',
+                lineCap: 'round',
+              }}
+            />
+          </MapboxGL.ShapeSource>
+        ))}
 
         {/* Station markers */}
         {stations.map((station) => (
@@ -125,7 +126,8 @@ export const MapScreen = ({ navigation }: any) => {
           >
             <View style={[
               styles.stationMarker,
-              selectedStation?.id === station.id && styles.stationMarkerSelected
+              { borderColor: LINE_COLORS[station.line] ?? '#000099' },
+              selectedStation?.id === station.id && styles.stationMarkerSelected,
             ]} />
           </MapboxGL.PointAnnotation>
         ))}
@@ -144,51 +146,18 @@ export const MapScreen = ({ navigation }: any) => {
         ))}
       </MapboxGL.MapView>
 
-      {/* Search bar */}
-      <View style={styles.searchBar}>
-        <View style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search stations"
-          placeholderTextColor="#6C757D"
-          value={search}
-          onChangeText={handleSearch}
-        />
-      </View>
-
-      {/* Search results dropdown */}
-      {searchResults.length > 0 && (
-        <View style={styles.searchResults}>
-          <FlatList
-            data={searchResults}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.searchResultItem}
-                onPress={() => handleSelectStation(item)}
-              >
-                <Text style={styles.searchResultText}>{item.name_en}</Text>
-                {item.name_th ? (
-                  <Text style={styles.searchResultSubText}>{item.name_th}</Text>
-                ) : null}
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      )}
-
       {/* Station info card */}
       {selectedStation && (
         <View style={styles.infoCard}>
+          <View style={[styles.lineTag, { backgroundColor: LINE_COLORS[selectedStation.line] ?? '#000099' }]}>
+            <Text style={styles.lineTagText}>{selectedStation.line}</Text>
+          </View>
           <Text style={styles.infoTitle}>{selectedStation.name_en}</Text>
-          {selectedStation.name_th ? (
-            <Text style={styles.infoSubTitle}>{selectedStation.name_th}</Text>
-          ) : null}
-          <Text style={styles.infoLine}>Line: {selectedStation.line}</Text>
+          <Text style={styles.infoSubTitle}>{selectedStation.name_th}</Text>
 
           {exits.length > 0 && (
             <>
-              <Text style={styles.exitsTitle}>Exits:</Text>
+              <Text style={styles.exitsTitle}>Exits</Text>
               {exits.map((exit) => (
                 <Text key={exit.id} style={styles.exitItem}>
                   Exit {exit.exit_number} — {exit.description}
@@ -221,25 +190,19 @@ export const MapScreen = ({ navigation }: any) => {
           <View style={styles.navIconProfile} />
         </TouchableOpacity>
       </View>
-
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#E8EAF6',
-  },
-  map: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#E8EAF6' },
+  map: { flex: 1 },
   stationMarker: {
     width: 14,
     height: 14,
     backgroundColor: '#E7ECF6',
     borderRadius: 999,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: '#000099',
   },
   stationMarkerSelected: {
@@ -262,67 +225,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#000099',
   },
-  searchBar: {
-    position: 'absolute',
-    top: 26,
-    left: 22,
-    width: 289,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#E6EFF7',
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    zIndex: 10,
-    shadowColor: '#C5D9D5',
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  searchIcon: {
-    width: 18,
-    height: 18,
-    backgroundColor: '#6C757D',
-    borderRadius: 9,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 12,
-    color: '#3F487B',
-  },
-  searchResults: {
-    position: 'absolute',
-    top: 68,
-    left: 22,
-    width: 289,
-    backgroundColor: '#F0F1F9',
-    borderRadius: 12,
-    zIndex: 10,
-    maxHeight: 200,
-    shadowColor: '#C5C7D1',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  searchResultItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  searchResultText: {
-    fontSize: 13,
-    color: '#3F487B',
-    fontWeight: '500',
-  },
-  searchResultSubText: {
-    fontSize: 11,
-    color: '#6C757D',
-    marginTop: 2,
-  },
   infoCard: {
     position: 'absolute',
     bottom: 100,
@@ -338,6 +240,18 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
+  lineTag: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  lineTagText: {
+    fontSize: 11,
+    color: 'white',
+    fontWeight: '600',
+  },
   infoTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -347,11 +261,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6C757D',
     marginTop: 2,
-  },
-  infoLine: {
-    fontSize: 12,
-    color: '#6C757D',
-    marginTop: 4,
     marginBottom: 8,
   },
   exitsTitle: {
@@ -407,7 +316,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: -2, height: -2 },
     shadowOpacity: 1,
     shadowRadius: 4,
-    elevation: 1,
   },
   navItemShadow: {
     shadowColor: '#C5C7D1',
@@ -416,22 +324,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4,
   },
-  navIconHeart: {
-    width: 19,
-    height: 19,
-    backgroundColor: '#F78BC9',
-    borderRadius: 2,
-  },
-  navIconMap: {
-    width: 17,
-    height: 22,
-    backgroundColor: '#F78BC9',
-    borderRadius: 2,
-  },
-  navIconProfile: {
-    width: 13,
-    height: 18,
-    backgroundColor: '#F78BC9',
-    borderRadius: 2,
-  },
+  navIconHeart: { width: 19, height: 19, backgroundColor: '#F78BC9', borderRadius: 2 },
+  navIconMap: { width: 17, height: 22, backgroundColor: '#F78BC9', borderRadius: 2 },
+  navIconProfile: { width: 13, height: 18, backgroundColor: '#F78BC9', borderRadius: 2 },
 });

@@ -163,7 +163,7 @@ export const ProfileScreen = ({ navigation }: any) => {
 
           <TouchableOpacity
             style={[styles.navItem, styles.navItemShadow]}
-            onPress={() => navigation.navigate('Map')}
+            onPress={() => navigation.navigate('')}
           >
             <View style={styles.navIconMap} />
           </TouchableOpacity>

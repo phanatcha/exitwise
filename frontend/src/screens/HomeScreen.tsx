@@ -86,6 +86,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
     if (tab === 'home') return;
     if (tab === 'planner') navigation.navigate('AITripPlanner');
     if (tab === 'saved') navigation.navigate('SaveTrip');
+    if (tab === 'profile') navigation.navigate('Profile');
   };
 
   const activeLine = LINES.find((l) => l.code === lineCode) ?? LINES[0];
@@ -111,14 +112,20 @@ export const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
           )}
         </View>
 
-        <Pressable
-          style={[styles.linePill, neuRaised]}
-          onPress={() => setLineModalOpen(true)}
-        >
-          <View style={[styles.lineDot, { backgroundColor: activeLine.color }]} />
-          <Text style={styles.linePillText}>{activeLine.label}</Text>
-          <ChevronDown color={colors.textSecondary} size={16} />
-        </Pressable>
+        <View style={styles.lineRowTop}>
+          <Pressable
+            style={[styles.linePill, neuRaised]}
+            onPress={() => setLineModalOpen(true)}
+          >
+            <View
+              style={[styles.lineDot, { backgroundColor: activeLine.color }]}
+            />
+            <Text style={styles.linePillText}>{activeLine.label}</Text>
+            <ChevronDown color={colors.textSecondary} size={16} />
+          </Pressable>
+
+          {/* Sign out + account knobs moved to the Profile tab. */}
+        </View>
 
         {pickMode === 'destination' && start ? (
           <View style={styles.pickBanner}>
@@ -321,15 +328,34 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     padding: 0,
   },
+  lineRowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   linePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     backgroundColor: colors.surface,
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 8,
     gap: 8,
+  },
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  signOutText: {
+    fontFamily: fontFamily.medium,
+    fontSize: fontSize.sm,
+    color: colors.primary,
   },
   lineDot: {
     width: 10,

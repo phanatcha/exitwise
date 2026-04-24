@@ -61,4 +61,5 @@ export type MainStackParamList = {
       }
     | undefined;
   SaveTrip: undefined;
+  Profile: undefined;
 };

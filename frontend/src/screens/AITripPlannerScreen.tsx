@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +12,8 @@ import {
   Coffee,
   DoorOpen,
   MapPin,
+  Minus,
+  Plus,
   ShoppingBag,
   Sparkles,
   Utensils,
@@ -30,7 +33,12 @@ import {
   type PlannerStop,
 } from '../services/planner';
 import { fetchStations, type Station } from '../services/stations';
-import { getOnboarding } from '../lib/onboarding';
+import {
+  getOnboarding,
+  saveBudget,
+  saveWalkingLimit,
+  type TravelModePref,
+} from '../lib/onboarding';
 import { createTrip } from '../services/trips';
 import type { MainStackParamList } from '../navigation/types';
 
@@ -61,6 +69,24 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Trip knobs. We hydrate from the onboarding store on first mount so the
+  // user's saved budget / walking limit seed the planner, then let them tweak
+  // inline via the "Edit Plan" sheet — regenerating the Gemini plan each time.
+  const [budget, setBudget] = useState(500);
+  const [walkingLimit, setWalkingLimit] = useState(500);
+  const [travelMode, setTravelMode] = useState<TravelModePref>('explorer');
+  const [editing, setEditing] = useState(false);
+  // Bumping this forces the plan effect to re-run without changing start/dest.
+  const [regenKey, setRegenKey] = useState(0);
+
+  useEffect(() => {
+    getOnboarding().then((o) => {
+      if (o.budget_baht) setBudget(o.budget_baht);
+      if (o.walking_limit_m) setWalkingLimit(o.walking_limit_m);
+      setTravelMode(o.travel_mode);
+    });
+  }, []);
+
   // Resolve legacy `origin_station_code` param by hydrating from /stations.
   useEffect(() => {
     if (start || !route.params?.origin_station_code) return;
@@ -83,15 +109,17 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
     (async () => {
       setLoading(true);
       setError(null);
-      const prefs = await getOnboarding();
       try {
         const endId = destination?.id ?? start.id;
         const res = await generateItinerary({
           start_station_id: start.id,
           end_station_id: endId,
-          budget: prefs.budget_baht ?? 500,
-          max_walking_distance: prefs.walking_limit_m ?? 500,
-          travel_mode: 'walking',
+          budget,
+          max_walking_distance: walkingLimit,
+          // Honour the user's Profile setting:
+          //   - 'lazy'     → Gemini returns one great POI
+          //   - 'explorer' → 2-3 stop walking tour
+          travel_mode: travelMode,
         });
         if (!cancelled) setPlan(res);
       } catch (e: any) {
@@ -108,17 +136,21 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
     return () => {
       cancelled = true;
     };
-  }, [start?.id, destination?.id]);
+  }, [start?.id, destination?.id, regenKey]);
 
   const handleSave = async () => {
     if (!plan || !start) return;
-    const prefs = await getOnboarding();
     setSaving(true);
     try {
+      // Use the live knobs the user just saw, not the onboarding defaults,
+      // so the saved card on SaveTripScreen matches what they actually
+      // generated (e.g. "Walking Limit 700 m / Budget 800 Baht").
       await createTrip({
-        title: `${start.name} Trip`,
-        walking_limit_m: prefs.walking_limit_m ?? 500,
-        budget_baht: prefs.budget_baht ?? 500,
+        title: destination
+          ? `${start.name} → ${destination.name}`
+          : `${start.name} Trip`,
+        walking_limit_m: walkingLimit,
+        budget_baht: budget,
         stops: plan.stops.map((s, i) => ({
           name: s.name,
           order_index: i,
@@ -137,6 +169,19 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
     if (tab === 'planner') return;
     if (tab === 'home') navigation.navigate('Home');
     if (tab === 'saved') navigation.navigate('SaveTrip');
+    if (tab === 'profile') navigation.navigate('Profile');
+  };
+
+  const adjustBudget = (delta: number) =>
+    setBudget((b) => Math.max(100, Math.min(5000, b + delta)));
+  const adjustWalking = (delta: number) =>
+    setWalkingLimit((w) => Math.max(100, Math.min(3000, w + delta)));
+
+  const handleApplyEdit = async () => {
+    // Persist so subsequent screens / sessions see the new knobs.
+    await Promise.all([saveBudget(budget), saveWalkingLimit(walkingLimit)]);
+    setEditing(false);
+    setRegenKey((k) => k + 1);
   };
 
   const title = useMemo(() => {
@@ -146,7 +191,17 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [start, destination]);
 
   const distanceKm = plan ? (plan.total_distance_m / 1000).toFixed(1) : '—';
-  const durationHr = plan ? Math.round(plan.estimated_duration_min / 60) : 0;
+  // Walking trips are almost always under an hour, so rounding to whole
+  // hours used to display "Approximately 0 hours" for 30–45 minute tours.
+  // Format in minutes when <60 min, otherwise as Xh Ymin.
+  const durationLabel = (() => {
+    if (!plan) return '—';
+    const mins = Math.max(0, Math.round(plan.estimated_duration_min));
+    if (mins < 60) return `about ${mins} min`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m === 0 ? `about ${h} hr` : `about ${h} hr ${m} min`;
+  })();
 
   return (
     <GradientBg>
@@ -181,8 +236,7 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
           ) : (
             <>
               <Text style={styles.meta}>
-                ~{distanceKm} km · Approximately {durationHr} hour
-                {durationHr === 1 ? '' : 's'}
+                ~{distanceKm} km · {durationLabel}
               </Text>
 
               {plan?.recommended_exit ? (
@@ -191,7 +245,11 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
                   <Text style={styles.exitCardText}>
                     Gemini suggests{' '}
                     <Text style={styles.exitCardBold}>
-                      Exit {plan.recommended_exit}
+                      {/* Accept both "2" and "Exit 2" from the backend so we
+                          never render "Exit Exit 2". */}
+                      {/^\s*exit\b/i.test(plan.recommended_exit)
+                        ? plan.recommended_exit
+                        : `Exit ${plan.recommended_exit}`}
                     </Text>{' '}
                     from {start.name}.
                   </Text>
@@ -239,6 +297,65 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
                 )}
               </NeuCard>
 
+              {editing ? (
+                <NeuCard radius={24} style={styles.editCard}>
+                  <Text style={styles.editTitle}>Edit Plan</Text>
+
+                  <View style={styles.editRow}>
+                    <Text style={styles.editLabel}>Budget</Text>
+                    <View style={styles.stepper}>
+                      <Pressable
+                        style={styles.stepBtn}
+                        onPress={() => adjustBudget(-100)}
+                      >
+                        <Minus color={colors.primaryDeep} size={16} />
+                      </Pressable>
+                      <Text style={styles.stepValue}>{budget} ฿</Text>
+                      <Pressable
+                        style={styles.stepBtn}
+                        onPress={() => adjustBudget(100)}
+                      >
+                        <Plus color={colors.primaryDeep} size={16} />
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <View style={styles.editRow}>
+                    <Text style={styles.editLabel}>Walking</Text>
+                    <View style={styles.stepper}>
+                      <Pressable
+                        style={styles.stepBtn}
+                        onPress={() => adjustWalking(-100)}
+                      >
+                        <Minus color={colors.primaryDeep} size={16} />
+                      </Pressable>
+                      <Text style={styles.stepValue}>{walkingLimit} m</Text>
+                      <Pressable
+                        style={styles.stepBtn}
+                        onPress={() => adjustWalking(100)}
+                      >
+                        <Plus color={colors.primaryDeep} size={16} />
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <View style={styles.editActions}>
+                    <SecondaryButton
+                      label="Cancel"
+                      variant="outline"
+                      onPress={() => setEditing(false)}
+                      style={{ flex: 1 }}
+                    />
+                    <PrimaryButton
+                      label="Regenerate"
+                      variant="pink"
+                      onPress={handleApplyEdit}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                </NeuCard>
+              ) : null}
+
               {plan ? (
                 <View style={styles.actions}>
                   <PrimaryButton
@@ -259,7 +376,11 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
                       }
                     />
                   ) : (
-                    <SecondaryButton label="Edit Plan" variant="outline" />
+                    <SecondaryButton
+                      label="Edit Plan"
+                      variant="outline"
+                      onPress={() => setEditing((v) => !v)}
+                    />
                   )}
                 </View>
               ) : null}
@@ -419,5 +540,51 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  editCard: {
+    padding: 20,
+    gap: 14,
+    marginBottom: 16,
+  },
+  editTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: fontSize.base,
+    color: colors.primaryDeep,
+    marginBottom: 4,
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  editLabel: {
+    fontFamily: fontFamily.medium,
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  stepBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(63, 81, 181, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepValue: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: fontSize.sm,
+    color: colors.primaryDeep,
+    minWidth: 80,
+    textAlign: 'center',
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
   },
 });

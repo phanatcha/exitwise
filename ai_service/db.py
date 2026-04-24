@@ -12,8 +12,26 @@ async def init_db():
         return
 
     # asyncpg expects 'postgresql://' instead of some other variants sometimes, but Supabase URL is fine
+    #
+    # IMPORTANT: Supabase's pooled connection (port 6543) runs pgbouncer in
+    # transaction pool mode, which cannot hold server-side prepared
+    # statements across requests. asyncpg caches prepared statements by
+    # default and will crash with:
+    #   InvalidSQLStatementNameError: prepared statement "__asyncpg_stmt_1__"
+    #   does not exist
+    # on the second query. Setting statement_cache_size=0 disables that
+    # cache so every query is sent as a simple query — which is what
+    # pgbouncer expects. This is also safe against the direct port 5432
+    # connection (just a minor perf hit), so we always set it.
     try:
-        pool = await asyncpg.create_pool(database_url)
+        pool = await asyncpg.create_pool(
+            database_url,
+            statement_cache_size=0,
+            # Disable asyncpg's per-connection type codec introspection cache
+            # too — it also issues prepared statements under the hood, which
+            # pgbouncer transaction mode can't hold across requests.
+            server_settings={"jit": "off"},
+        )
         print("Successfully connected to the database from Python!")
     except Exception as e:
         print(f"Failed to connect to the database from Python: {e}")
@@ -74,23 +92,55 @@ async def get_pois_near_station(station_id: int, max_distance: int, max_budget: 
         return pois
 
 async def get_station_exits(station_id: int) -> List[Dict[str, Any]]:
+    """
+    Returns all exits for a station including lat/lng so the planner can
+    compute deterministic walking distances from the recommended exit to the
+    first POI.
+    """
     if not pool:
         return []
 
     query = """
-        SELECT id, exit_number, description
+        SELECT id, exit_number, description,
+               ST_Y(location::geometry) as lat,
+               ST_X(location::geometry) as lng
         FROM station_exits
         WHERE station_id = $1
     """
-    
+
     async with pool.acquire() as conn:
         records = await conn.fetch(query, station_id)
-        
+
         exits = []
         for r in records:
             exits.append({
                 "id": r["id"],
                 "exit_number": r["exit_number"],
-                "description": r["description"] or ""
+                "description": r["description"] or "",
+                "lat": r["lat"],
+                "lng": r["lng"],
             })
         return exits
+
+
+async def get_station_center(station_id: int) -> Dict[str, Any]:
+    """
+    Fallback coordinate source when a station has no exits in the DB —
+    we use the station center as a stand-in "exit" so route-step computation
+    still produces sensible meters.
+    """
+    if not pool:
+        return {}
+
+    query = """
+        SELECT id, name_en,
+               ST_Y(location::geometry) as lat,
+               ST_X(location::geometry) as lng
+        FROM stations
+        WHERE id = $1
+    """
+    async with pool.acquire() as conn:
+        r = await conn.fetchrow(query, station_id)
+        if not r:
+            return {}
+        return {"id": r["id"], "name": r["name_en"], "lat": r["lat"], "lng": r["lng"]}

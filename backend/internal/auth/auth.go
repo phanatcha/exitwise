@@ -130,24 +130,35 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(AuthResponse{Token: token, UserID: userID})
 }
 
-// AuthMiddleware validates the Bearer token and injects user_id into context
+// AuthMiddleware best-effort resolves the Bearer token against our in-memory
+// token store and injects user_id into the request context.
+//
+// MVP note: the frontend is already authenticating with Supabase and sends
+// the Supabase JWT as the Bearer, which this middleware can't verify yet.
+// Rather than 401 the whole API, we treat unknown tokens the same as no
+// token — the request falls through to the handler with no user_id. Any
+// handler that genuinely needs user_id (e.g. /trips persistence) should
+// read it from context and 401 itself if it's missing. This keeps public
+// read endpoints (/stations, /pois, /directions, /generate-itinerary)
+// working while the Supabase JWT verification is designed.
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			// Allow unauthenticated access for now (MVP)
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		userID, ok := tokenStore[token]
-		if !ok {
-			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+		if userID, ok := tokenStore[token]; ok {
+			ctx := context.WithValue(r.Context(), "user_id", userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "user_id", userID)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		// Unknown bearer (likely a Supabase JWT). Fall through as anonymous
+		// so public endpoints keep working; authenticated handlers will
+		// detect the missing user_id and 401 on their own.
+		next.ServeHTTP(w, r)
 	})
 }

@@ -5,13 +5,15 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { Home, Sparkles, Bookmark } from 'lucide-react-native';
+import { Home, Sparkles, Bookmark, User } from 'lucide-react-native';
 import { colors, neuRaised } from '../theme';
 
-// Rounded-50 pill at the bottom of the main screens (Home / Planner / Saved).
-// Figma renders it as a neumorphic container with three icon buttons.
+// Rounded-50 pill at the bottom of the main screens.
+// Figma originally showed three tabs (Home / Planner / Saved); we added
+// Profile as a fourth so users can tweak travel mode, budget, walking limit,
+// and sign out without needing a header button on every screen.
 
-export type NavTab = 'home' | 'planner' | 'saved';
+export type NavTab = 'home' | 'planner' | 'saved' | 'profile';
 
 interface Props {
   current: NavTab;
@@ -23,6 +25,7 @@ const ITEMS: Array<{ key: NavTab; Icon: React.ComponentType<any> }> = [
   { key: 'home', Icon: Home },
   { key: 'planner', Icon: Sparkles },
   { key: 'saved', Icon: Bookmark },
+  { key: 'profile', Icon: User },
 ];
 
 export const BottomNavPill: React.FC<Props> = ({ current, onSelect, style }) => {

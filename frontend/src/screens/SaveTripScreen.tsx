@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -7,7 +8,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Pencil, MapPin } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { Trash2, MapPin } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { GradientBg } from '../components/GradientBg';
@@ -15,60 +17,64 @@ import { NeuCard } from '../components/NeuCard';
 import { BackButton } from '../components/BackButton';
 import { BottomNavPill, type NavTab } from '../components/BottomNavPill';
 import { colors, fontFamily, fontSize } from '../theme';
-import { listTrips, type Trip } from '../services/trips';
+import { listTrips, removeTrip, type Trip } from '../services/trips';
 import type { MainStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'SaveTrip'>;
 
 // Figma node 27:793. Teal-wash curved header + list of trip cards.
 
-const MOCK: Trip[] = [
-  {
-    id: '1',
-    title: 'Samyan Trip',
-    walking_limit_m: 500,
-    budget_baht: 500,
-    cover_image_url: null,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    title: 'Bang Wa Melon',
-    walking_limit_m: 500,
-    budget_baht: 500,
-    cover_image_url: null,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: '3',
-    title: 'Khlong Bang Luang',
-    walking_limit_m: 500,
-    budget_baht: 500,
-    cover_image_url: null,
-    created_at: new Date().toISOString(),
-  },
-];
-
 export const SaveTripScreen: React.FC<Props> = ({ navigation }) => {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    listTrips()
-      .then((t) => {
-        setTrips(t.length ? t : MOCK);
-        setLoaded(true);
-      })
-      .catch(() => {
-        setTrips(MOCK);
-        setLoaded(true);
-      });
-  }, []);
+  // useFocusEffect re-runs on every tab/screen focus so a freshly-saved
+  // plan from AITripPlanner shows up immediately when the user lands here.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      listTrips()
+        .then((t) => {
+          if (!cancelled) {
+            setTrips(t);
+            setLoaded(true);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setTrips([]);
+            setLoaded(true);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
+  const handleDelete = (trip: Trip) => {
+    Alert.alert(
+      'Delete this trip?',
+      `"${trip.title}" will be removed from your saved plans.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await removeTrip(trip.id);
+            setTrips((current) => current.filter((t) => t.id !== trip.id));
+          },
+        },
+      ],
+    );
+  };
 
   const handleNav = (tab: NavTab) => {
     if (tab === 'saved') return;
     if (tab === 'home') navigation.navigate('Home');
     if (tab === 'planner') navigation.navigate('AITripPlanner');
+    if (tab === 'profile') navigation.navigate('Profile');
   };
 
   return (
@@ -109,8 +115,12 @@ export const SaveTripScreen: React.FC<Props> = ({ navigation }) => {
                   Budget {trip.budget_baht ?? '—'} Baht
                 </Text>
               </View>
-              <Pressable style={styles.edit} hitSlop={8}>
-                <Pencil color={colors.primary} size={18} />
+              <Pressable
+                style={styles.edit}
+                hitSlop={8}
+                onPress={() => handleDelete(trip)}
+              >
+                <Trash2 color={colors.primary} size={18} />
               </Pressable>
             </NeuCard>
           ))

@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -45,6 +46,22 @@ func InitDB() error {
 	if err != nil {
 		return fmt.Errorf("unable to parse connection string: %w", err)
 	}
+
+	// IMPORTANT: Supabase's pooled connection (port 6543) runs pgbouncer in
+	// transaction pool mode, which cannot hold server-side prepared
+	// statements across requests. pgx's default "extended" protocol caches
+	// prepared statements per connection, and when pgbouncer hands a later
+	// request to a different backend connection the cached statement
+	// vanishes — producing intermittent 500s like:
+	//   ERROR: prepared statement "stmt_*" does not exist (SQLSTATE 26000)
+	// on /stations (and any other read endpoint) depending on which pooled
+	// conn the request lands on.
+	//
+	// Forcing simple protocol bypasses the prepared-statement cache
+	// entirely — each query is sent as plain text, so pgbouncer never sees
+	// a stale statement name. Small perf cost, huge reliability win, and
+	// safe against both pooled (6543) and direct (5432) Supabase endpoints.
+	config.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {

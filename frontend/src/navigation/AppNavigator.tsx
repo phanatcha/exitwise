@@ -12,6 +12,9 @@ import { LogInScreen } from '../screens/LogInScreen';
 import { OnboardingWalkingScreen } from '../screens/OnboardingWalkingScreen';
 import { OnboardingBudgetScreen } from '../screens/OnboardingBudgetScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { StationDetailScreen } from '../screens/StationDetailScreen';
+import { TripConfirmScreen } from '../screens/TripConfirmScreen';
+import { NavigationScreen } from '../screens/NavigationScreen';
 import { AITripPlannerScreen } from '../screens/AITripPlannerScreen';
 import { SaveTripScreen } from '../screens/SaveTripScreen';
 
@@ -54,6 +57,9 @@ const OnboardingNavigator = ({
 const MainNavigator = () => (
   <MainStack.Navigator screenOptions={{ headerShown: false }}>
     <MainStack.Screen name="Home" component={HomeScreen} />
+    <MainStack.Screen name="StationDetail" component={StationDetailScreen} />
+    <MainStack.Screen name="TripConfirm" component={TripConfirmScreen} />
+    <MainStack.Screen name="Navigation" component={NavigationScreen} />
     <MainStack.Screen name="AITripPlanner" component={AITripPlannerScreen} />
     <MainStack.Screen name="SaveTrip" component={SaveTripScreen} />
   </MainStack.Navigator>

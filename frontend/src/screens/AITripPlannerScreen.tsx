@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -7,7 +7,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Coffee, Utensils, ShoppingBag, MapPin } from 'lucide-react-native';
+import {
+  Coffee,
+  DoorOpen,
+  MapPin,
+  ShoppingBag,
+  Sparkles,
+  Utensils,
+} from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { GradientBg } from '../components/GradientBg';
@@ -22,28 +29,17 @@ import {
   type PlannerResult,
   type PlannerStop,
 } from '../services/planner';
+import { fetchStations, type Station } from '../services/stations';
 import { getOnboarding } from '../lib/onboarding';
 import { createTrip } from '../services/trips';
 import type { MainStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'AITripPlanner'>;
 
-// Figma node 27:794. Fallback example while the backend isn't live.
-const FALLBACK: PlannerResult = {
-  total_distance_m: 1100,
-  estimated_duration_min: 180,
-  stops: [
-    { name: 'Leave Exit 3', distance_m: 0, kind: 'exit' },
-    { name: 'The Coffee Club', distance_m: 200, kind: 'food' },
-    { name: 'Paa Noi Boat Noodle', distance_m: 600, kind: 'food' },
-    { name: 'Ari Market', distance_m: 900, kind: 'landmark' },
-  ],
-};
-
 const iconFor = (kind: PlannerStop['kind']) => {
   switch (kind) {
     case 'exit':
-      return MapPin;
+      return DoorOpen;
     case 'food':
       return Utensils;
     case 'poi':
@@ -56,38 +52,71 @@ const iconFor = (kind: PlannerStop['kind']) => {
 };
 
 export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
-  const origin = route.params?.origin_station_code ?? 'BL-Ari';
+  const [start, setStart] = useState<Station | null>(route.params?.start ?? null);
+  const [destination, setDestination] = useState<Station | null>(
+    route.params?.destination ?? null,
+  );
   const [plan, setPlan] = useState<PlannerResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Resolve legacy `origin_station_code` param by hydrating from /stations.
+  useEffect(() => {
+    if (start || !route.params?.origin_station_code) return;
+    fetchStations()
+      .then((rows) => {
+        const hit = rows.find(
+          (s) => s.code === route.params?.origin_station_code,
+        );
+        if (hit) setStart(hit);
+      })
+      .catch(() => {});
+  }, [route.params?.origin_station_code, start]);
 
   useEffect(() => {
+    if (!start) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
     (async () => {
+      setLoading(true);
+      setError(null);
       const prefs = await getOnboarding();
       try {
+        const endId = destination?.id ?? start.id;
         const res = await generateItinerary({
-          origin_station_code: origin,
-          walking_limit_m: prefs.walking_limit_m ?? 500,
-          budget_baht: prefs.budget_baht ?? 500,
+          start_station_id: start.id,
+          end_station_id: endId,
+          budget: prefs.budget_baht ?? 500,
+          max_walking_distance: prefs.walking_limit_m ?? 500,
+          travel_mode: 'walking',
         });
-        setPlan(res);
-      } catch {
-        // Backend not available yet — show the Figma reference payload so the
-        // screen is still usable for design QA.
-        setPlan(FALLBACK);
+        if (!cancelled) setPlan(res);
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(
+            e?.response?.data?.error ??
+              'The AI planner is unavailable right now. Try again in a moment.',
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, [origin]);
+    return () => {
+      cancelled = true;
+    };
+  }, [start?.id, destination?.id]);
 
   const handleSave = async () => {
-    if (!plan) return;
+    if (!plan || !start) return;
     const prefs = await getOnboarding();
     setSaving(true);
     try {
       await createTrip({
-        title: `${origin.replace('BL-', '')} Trip`,
+        title: `${start.name} Trip`,
         walking_limit_m: prefs.walking_limit_m ?? 500,
         budget_baht: prefs.budget_baht ?? 500,
         stops: plan.stops.map((s, i) => ({
@@ -110,10 +139,14 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
     if (tab === 'saved') navigation.navigate('SaveTrip');
   };
 
-  const distanceKm = plan
-    ? (plan.total_distance_m / 1000).toFixed(1)
-    : '—';
-  const durationHours = plan ? Math.round(plan.estimated_duration_min / 60) : 0;
+  const title = useMemo(() => {
+    if (start && destination) return `${start.name} → ${destination.name}`;
+    if (start) return `${start.name} Trip`;
+    return 'AI Trip Plan';
+  }, [start, destination]);
+
+  const distanceKm = plan ? (plan.total_distance_m / 1000).toFixed(1) : '—';
+  const durationHr = plan ? Math.round(plan.estimated_duration_min / 60) : 0;
 
   return (
     <GradientBg>
@@ -121,7 +154,7 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
         <View style={styles.header}>
           <BackButton onPress={() => navigation.goBack()} />
           <View style={styles.headerTitleWrap}>
-            <Text style={styles.headerTitle}>Ari Trip Plan</Text>
+            <Text style={styles.headerTitle}>{title}</Text>
           </View>
           <View style={{ width: 44 }} />
         </View>
@@ -130,48 +163,108 @@ export const AITripPlannerScreen: React.FC<Props> = ({ navigation, route }) => {
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.meta}>
-            ~{distanceKm} km · Approximately {durationHours} hours
-          </Text>
+          {!start ? (
+            <NeuCard radius={24} style={styles.emptyCard}>
+              <View style={styles.emptyIcon}>
+                <Sparkles color={colors.primary} size={24} />
+              </View>
+              <Text style={styles.emptyTitle}>No station picked yet</Text>
+              <Text style={styles.emptyBody}>
+                Go to the Blue Line map and tap a station to get an AI trip
+                suggestion starting from there.
+              </Text>
+              <PrimaryButton
+                label="Browse stations"
+                onPress={() => navigation.navigate('Home')}
+              />
+            </NeuCard>
+          ) : (
+            <>
+              <Text style={styles.meta}>
+                ~{distanceKm} km · Approximately {durationHr} hour
+                {durationHr === 1 ? '' : 's'}
+              </Text>
 
-          <NeuCard radius={24} style={styles.stopsCard}>
-            {loading ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              plan?.stops.map((stop, idx) => {
-                const Icon = iconFor(stop.kind);
-                const isLast = idx === plan.stops.length - 1;
-                return (
-                  <View key={idx} style={styles.stopRow}>
-                    <View style={styles.stopLeft}>
-                      <View style={styles.avatar}>
-                        <Icon color={colors.primary} size={18} />
-                      </View>
-                      {!isLast && <View style={styles.trail} />}
-                    </View>
-                    <View style={styles.stopText}>
-                      <Text style={styles.stopName}>{stop.name}</Text>
-                      {stop.distance_m > 0 && (
-                        <Text style={styles.stopDistance}>
-                          {stop.distance_m} m
-                        </Text>
-                      )}
-                    </View>
+              {plan?.recommended_exit ? (
+                <NeuCard radius={20} style={styles.exitCard}>
+                  <DoorOpen color={colors.accentPink} size={18} />
+                  <Text style={styles.exitCardText}>
+                    Gemini suggests{' '}
+                    <Text style={styles.exitCardBold}>
+                      Exit {plan.recommended_exit}
+                    </Text>{' '}
+                    from {start.name}.
+                  </Text>
+                </NeuCard>
+              ) : null}
+
+              <NeuCard radius={24} style={styles.stopsCard}>
+                {loading ? (
+                  <View style={styles.loadingWrap}>
+                    <ActivityIndicator color={colors.primary} />
+                    <Text style={styles.loadingText}>
+                      Asking Gemini for a trip…
+                    </Text>
                   </View>
-                );
-              })
-            )}
-          </NeuCard>
+                ) : error ? (
+                  <View style={styles.loadingWrap}>
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                ) : (
+                  plan?.stops.map((stop, idx) => {
+                    const Icon = iconFor(stop.kind);
+                    const isLast = idx === plan.stops.length - 1;
+                    return (
+                      <View key={idx} style={styles.stopRow}>
+                        <View style={styles.stopLeft}>
+                          <View style={styles.avatar}>
+                            <Icon color={colors.primary} size={18} />
+                          </View>
+                          {!isLast && <View style={styles.trail} />}
+                        </View>
+                        <View style={styles.stopText}>
+                          <Text style={styles.stopName}>{stop.name}</Text>
+                          {stop.distance_m > 0 && (
+                            <Text style={styles.stopDistance}>
+                              {stop.distance_m} m
+                            </Text>
+                          )}
+                          {stop.note ? (
+                            <Text style={styles.stopNote}>{stop.note}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+              </NeuCard>
 
-          <View style={styles.actions}>
-            <PrimaryButton
-              label="Save Plan"
-              variant="pink"
-              onPress={handleSave}
-              loading={saving}
-            />
-            <SecondaryButton label="Edit Plan" variant="outline" />
-          </View>
+              {plan ? (
+                <View style={styles.actions}>
+                  <PrimaryButton
+                    label="Save Plan"
+                    variant="pink"
+                    onPress={handleSave}
+                    loading={saving}
+                  />
+                  {destination ? (
+                    <SecondaryButton
+                      label="Start Navigation"
+                      variant="outline"
+                      onPress={() =>
+                        navigation.navigate('Navigation', {
+                          start,
+                          destination,
+                        })
+                      }
+                    />
+                  ) : (
+                    <SecondaryButton label="Edit Plan" variant="outline" />
+                  )}
+                </View>
+              ) : null}
+            </>
+          )}
         </ScrollView>
 
         <View style={styles.navWrap}>
@@ -209,12 +302,29 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.medium,
     fontSize: fontSize.sm,
     color: colors.textSecondary,
-    marginBottom: 24,
+    marginBottom: 16,
+  },
+  exitCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    marginBottom: 16,
+  },
+  exitCardText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+  },
+  exitCardBold: {
+    fontFamily: fontFamily.semiBold,
+    color: colors.primaryDeep,
   },
   stopsCard: {
     padding: 20,
     gap: 4,
-    marginBottom: 32,
+    marginBottom: 24,
   },
   stopRow: {
     flexDirection: 'row',
@@ -257,11 +367,57 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.textSecondary,
   },
+  stopNote: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  loadingWrap: {
+    alignItems: 'center',
+    paddingVertical: 30,
+    gap: 10,
+  },
+  loadingText: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+  },
+  errorText: {
+    fontFamily: fontFamily.medium,
+    fontSize: fontSize.sm,
+    color: colors.danger,
+    textAlign: 'center',
+  },
   actions: { gap: 14 },
   navWrap: {
     position: 'absolute',
     left: 20,
     right: 20,
     bottom: 20,
+  },
+  emptyCard: {
+    padding: 24,
+    gap: 12,
+    alignItems: 'center',
+  },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(63, 81, 181, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: fontSize.base,
+    color: colors.primaryDeep,
+  },
+  emptyBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
 });

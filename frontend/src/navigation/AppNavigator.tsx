@@ -17,6 +17,7 @@ import { TripConfirmScreen } from '../screens/TripConfirmScreen';
 import { NavigationScreen } from '../screens/NavigationScreen';
 import { AITripPlannerScreen } from '../screens/AITripPlannerScreen';
 import { SaveTripScreen } from '../screens/SaveTripScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
 
 import type {
   AuthStackParamList,
@@ -62,6 +63,7 @@ const MainNavigator = () => (
     <MainStack.Screen name="Navigation" component={NavigationScreen} />
     <MainStack.Screen name="AITripPlanner" component={AITripPlannerScreen} />
     <MainStack.Screen name="SaveTrip" component={SaveTripScreen} />
+    <MainStack.Screen name="Profile" component={ProfileScreen} />
   </MainStack.Navigator>
 );
 

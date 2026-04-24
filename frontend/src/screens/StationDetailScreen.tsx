@@ -88,6 +88,7 @@ export const StationDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     if (tab === 'home') navigation.navigate('Home');
     if (tab === 'planner') navigation.navigate('AITripPlanner');
     if (tab === 'saved') navigation.navigate('SaveTrip');
+    if (tab === 'profile') navigation.navigate('Profile');
   };
 
   return (

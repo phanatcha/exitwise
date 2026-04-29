@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowRight } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-
+import { useAuth } from '../lib/auth';
 import { GradientBg } from '../components/GradientBg';
 import { NeuInput } from '../components/NeuInput';
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -19,6 +19,7 @@ import { colors, fontFamily, fontSize } from '../theme';
 import { saveBudget, markOnboardingDone } from '../lib/onboarding';
 import { updatePreferences } from '../services/users';
 import type { OnboardingStackParamList } from '../navigation/types';
+import { NeuCard } from '../components/NeuCard';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingBudget'> & {
   onDone: () => void;
@@ -32,6 +33,7 @@ export const OnboardingBudgetScreen: React.FC<Props> = ({
   route,
   onDone,
 }) => {
+  const { session } = useAuth();
   const [baht, setBaht] = useState('1000');
   const [submitting, setSubmitting] = useState(false);
 
@@ -41,8 +43,8 @@ export const OnboardingBudgetScreen: React.FC<Props> = ({
 
     setSubmitting(true);
     try {
-      await saveBudget(n);
-      await markOnboardingDone();
+      await saveBudget(session!.user.id, n);
+      await markOnboardingDone(session!.user.id);
       // Fire-and-forget to the backend. The local state is the source of truth
       // for navigation, so backend failure doesn't block the user.
       updatePreferences({
@@ -56,54 +58,52 @@ export const OnboardingBudgetScreen: React.FC<Props> = ({
     }
   };
 
-  return (
+    return (
     <GradientBg>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <SafeAreaView style={styles.flex}>
-          <View style={styles.inner}>
-            <View style={styles.header}>
-              <BackButton onPress={() => navigation.goBack()} />
-              <View style={{ flex: 1 }} />
-            </View>
+      <SafeAreaView style={styles.flex}>
+        <View style={styles.inner}>
 
-            <View style={styles.progress}>
-              <StepDots total={2} current={2} />
-              <Text style={styles.step}>Step 2 of 2</Text>
-            </View>
+          {/* Back button */}
+          <BackButton onPress={() => navigation.goBack()} />
 
-            <View style={styles.body}>
+          {/* Step dots */}
+          <View style={styles.progress}>
+            <StepDots total={2} current={2} />
+            <Text style={styles.step}>Step 2 of 2</Text>
+          </View>
+
+          {/* Center card */}
+          <View style={styles.body}>
+            <NeuCard radius={24} style={styles.card}>
               <Text style={styles.title}>
-                What&apos;s your comfortable spending range?
+                What's your comfortable spending range?
               </Text>
               <Text style={styles.hint}>
-                Per outing — we&apos;ll tune food and activity picks to this.
+                Budget-friendly for students or ready to splurge?
               </Text>
 
+              {/* Inset input */}
               <NeuInput
-                value={baht}
+                value={`${baht} Baht`}
                 onChangeText={(t) => setBaht(t.replace(/[^0-9]/g, ''))}
                 keyboardType="number-pad"
-                placeholder="1000"
+                placeholder="1000 Baht"
                 containerStyle={styles.input}
-                style={styles.inputText}
               />
-              <Text style={styles.suffix}>Baht</Text>
-            </View>
 
-            <View style={styles.footer}>
+              {/* Next button */}
               <PrimaryButton
                 label="Next"
                 onPress={handleDone}
                 loading={submitting}
                 rightSlot={<ArrowRight color={colors.textInverse} size={18} />}
+                style={styles.btn}
               />
-            </View>
+            </NeuCard>
           </View>
-        </SafeAreaView>
-      </KeyboardAvoidingView>
+
+        </View>
+      </SafeAreaView>
     </GradientBg>
   );
 };
@@ -112,16 +112,12 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   inner: {
     flex: 1,
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 32,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
   progress: {
+    marginTop: 16,
     marginBottom: 24,
   },
   step: {
@@ -134,32 +130,28 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  card: {
+    padding: 24,
+    gap: 16,
+  },
   title: {
-    fontFamily: fontFamily.bold,
+    fontFamily: fontFamily.semiBold,
     fontSize: fontSize.xl,
     color: colors.primaryDeep,
-    marginBottom: 8,
+    lineHeight: 28,
   },
   hint: {
     fontFamily: fontFamily.regular,
-    fontSize: fontSize.base,
+    fontSize: fontSize.xs,
     color: colors.textSecondary,
-    marginBottom: 32,
+    lineHeight: 16,
   },
   input: {
-    paddingVertical: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
   },
-  inputText: {
-    fontSize: 24,
-    fontFamily: fontFamily.semiBold,
-    color: colors.primaryDeep,
+  btn: {
+    marginTop: 8,
+    borderRadius: 8,
   },
-  suffix: {
-    marginTop: 12,
-    textAlign: 'right',
-    fontFamily: fontFamily.medium,
-    fontSize: fontSize.md,
-    color: colors.textSecondary,
-  },
-  footer: { paddingTop: 16 },
 });

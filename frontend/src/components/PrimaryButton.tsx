@@ -72,11 +72,11 @@ export const PrimaryButton: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   shadowWrap: {
-    borderRadius: 999,
-    // iOS shadow is already set via neuRaised; no overflow:hidden here.
+  borderRadius: 16,
+  overflow: 'hidden',
   },
   pressable: {
-    borderRadius: 999,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   inner: {

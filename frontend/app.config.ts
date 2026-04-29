@@ -17,7 +17,7 @@ const MAPBOX_DOWNLOAD_TOKEN = process.env.MAPBOX_DOWNLOAD_TOKEN;
 const isNativeBuildStep =
   process.env.EAS_BUILD === 'true' ||
   process.argv.some(
-    (a) =>
+    (a: string) =>
       a.includes('prebuild') ||
       a.includes('run:android') ||
       a.includes('run:ios'),

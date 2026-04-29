@@ -80,7 +80,7 @@ export const AppNavigator: React.FC = () => {
       setOnboarded(null);
       return;
     }
-    getOnboarding().then((o) => setOnboarded(o.completed));
+    getOnboarding(session.user.id).then((o) => setOnboarded(o.completed));
   }, [session]);
 
   if (authLoading || (session && onboarded === null)) {
@@ -99,14 +99,14 @@ export const AppNavigator: React.FC = () => {
   }
 
   return (
-    <NavigationContainer>
-      {!session ? (
-        <AuthNavigator />
-      ) : !onboarded ? (
-        <OnboardingNavigator onDone={() => setOnboarded(true)} />
-      ) : (
-        <MainNavigator />
-      )}
-    </NavigationContainer>
+  <NavigationContainer key={session ? 'authed' : 'guest'}>
+    {!session ? (
+      <AuthNavigator />
+    ) : !onboarded ? (
+      <OnboardingNavigator onDone={() => setOnboarded(true)} />
+    ) : (
+      <MainNavigator />
+    )}
+  </NavigationContainer>
   );
 };

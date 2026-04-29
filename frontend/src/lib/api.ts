@@ -14,12 +14,32 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
+  // refreshSession() บังคับดึง token ใหม่เสมอถ้า expired
   const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (token) {
+  const session = data.session;
+
+  // ถ้า token ใกล้หมดอายุ ให้ refresh ก่อน
+  if (session) {
+    const expiresAt = session.expires_at ?? 0;
+    const now = Math.floor(Date.now() / 1000);
+    const shouldRefresh = expiresAt - now < 60; // refresh ถ้าเหลือน้อยกว่า 60 วิ
+
+    if (shouldRefresh) {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      const token = refreshed.session?.access_token;
+      if (token) {
+        config.headers = config.headers ?? {};
+        config.headers.Authorization = `Bearer ${token}`;
+        return config;
+      }
+    }
+    console.log('[ExitWise] session:', session ? 'exists' : 'null');
+    console.log('[ExitWise] token:', session?.access_token?.slice(0, 20) + '...');
+    console.log('[ExitWise] expires_at:', session?.expires_at);
     config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${token}`;
+    config.headers.Authorization = `Bearer ${session.access_token}`;
   }
+
   return config;
 });
 
@@ -34,7 +54,6 @@ api.interceptors.response.use(
   (res) => res,
   async (err) => {
     if (__DEV__) {
-      // eslint-disable-next-line no-console
       console.warn(
         '[ExitWise API]',
         err?.config?.method?.toUpperCase(),
@@ -43,6 +62,18 @@ api.interceptors.response.use(
         err?.response?.data ?? err?.message,
       );
     }
+
+    // retry ครั้งเดียวถ้าได้ 401 โดย force refresh token ก่อน
+    if (err?.response?.status === 401 && !err.config._retry) {
+      err.config._retry = true;
+      const { data } = await supabase.auth.refreshSession();
+      const token = data.session?.access_token;
+      if (token) {
+        err.config.headers.Authorization = `Bearer ${token}`;
+        return api(err.config);
+      }
+    }
+
     return Promise.reject(err);
   },
 );

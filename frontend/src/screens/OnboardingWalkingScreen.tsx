@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
 import { ArrowRight } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-
+import { useAuth } from '../lib/auth';
 import { GradientBg } from '../components/GradientBg';
 import { NeuCard } from '../components/NeuCard';
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -24,9 +24,9 @@ type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingWalking
 
 export const OnboardingWalkingScreen: React.FC<Props> = ({ navigation }) => {
   const [meters, setMeters] = useState(500);
-
+  const { session } = useAuth();
   const handleNext = async () => {
-    await saveWalkingLimit(meters);
+    await saveWalkingLimit(session!.user.id, meters);
     navigation.navigate('OnboardingBudget', { walking_limit_m: meters });
   };
 
@@ -39,50 +39,55 @@ export const OnboardingWalkingScreen: React.FC<Props> = ({ navigation }) => {
     <GradientBg>
       <SafeAreaView style={styles.safe}>
         <View style={styles.inner}>
+
           <View style={styles.header}>
             <StepDots total={2} current={1} />
             <Text style={styles.step}>Step 1 of 2</Text>
           </View>
 
           <View style={styles.body}>
-            <Text style={styles.title}>
-              What&apos;s your absolute walking limit?
-            </Text>
-            <Text style={styles.hint}>
-              We&apos;ll only suggest places you&apos;re willing to walk to.
-            </Text>
+            <NeuCard radius={24} style={styles.card}>
+              <Text style={styles.title}>
+                What's your absolute walking limit?
+              </Text>
+              <Text style={styles.hint}>
+                We won't suggest places further than this, no matter how cool they are.
+              </Text>
 
-            <NeuCard radius={30} style={styles.readoutCard}>
-              <Text style={styles.readout}>{label}</Text>
-              <Text style={styles.readoutLabel}>from the station exit</Text>
-            </NeuCard>
+              {/* Readout */}
+              <NeuCard radius={999} style={styles.readoutCard}>
+                <Text style={styles.readout}>{label}</Text>
+              </NeuCard>
 
-            <View style={styles.sliderWrap}>
-              <Slider
-                style={styles.slider}
-                minimumValue={0}
-                maximumValue={2000}
-                step={50}
-                value={meters}
-                onValueChange={setMeters}
-                minimumTrackTintColor={colors.primary}
-                maximumTrackTintColor="rgba(63, 81, 181, 0.2)"
-                thumbTintColor={colors.primary}
-              />
-              <View style={styles.scaleRow}>
-                <Text style={styles.scaleText}>0 km</Text>
-                <Text style={styles.scaleText}>2 km</Text>
+              {/* Slider */}
+              <View style={styles.sliderWrap}>
+                <Slider
+                  style={styles.slider}
+                  minimumValue={0}
+                  maximumValue={2000}
+                  step={50}
+                  value={meters}
+                  onValueChange={(val) => setMeters(Math.round(val))}
+                  minimumTrackTintColor={colors.primary}
+                  maximumTrackTintColor="#D6DBE6"
+                  thumbTintColor="#F3F3F3"
+                />
+                <View style={styles.scaleRow}>
+                  <Text style={styles.scaleText}>0 km</Text>
+                  <Text style={styles.scaleText}>2 km</Text>
+                </View>
               </View>
-            </View>
+
+              {/* Next button inside card */}
+              <PrimaryButton
+                label="Next"
+                onPress={handleNext}
+                rightSlot={<ArrowRight color={colors.textInverse} size={18} />}
+                style={styles.btn}
+              />
+            </NeuCard>
           </View>
 
-          <View style={styles.footer}>
-            <PrimaryButton
-              label="Next"
-              onPress={handleNext}
-              rightSlot={<ArrowRight color={colors.textInverse} size={18} />}
-            />
-          </View>
         </View>
       </SafeAreaView>
     </GradientBg>
@@ -93,7 +98,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   inner: {
     flex: 1,
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 32,
   },
@@ -111,34 +116,33 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  card: {
+    padding: 24,
+    gap: 16,
+  },
   title: {
-    fontFamily: fontFamily.bold,
+    fontFamily: fontFamily.semiBold,
     fontSize: fontSize.xl,
     color: colors.primaryDeep,
-    marginBottom: 8,
+    lineHeight: 28,
   },
   hint: {
     fontFamily: fontFamily.regular,
-    fontSize: fontSize.base,
+    fontSize: fontSize.xs,
     color: colors.textSecondary,
-    marginBottom: 32,
+    lineHeight: 16,
   },
   readoutCard: {
-    paddingVertical: 28,
-    paddingHorizontal: 24,
+    alignSelf: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
     alignItems: 'center',
-    marginBottom: 32,
   },
   readout: {
     fontFamily: fontFamily.bold,
-    fontSize: 44,
-    color: colors.primary,
-  },
-  readoutLabel: {
-    marginTop: 4,
-    fontFamily: fontFamily.regular,
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
+    fontSize: 36,
+    color: colors.primaryDeep,
+    lineHeight: 40,
   },
   sliderWrap: {
     paddingHorizontal: 6,
@@ -157,7 +161,8 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.textSecondary,
   },
-  footer: {
-    paddingTop: 16,
+  btn: {
+    marginTop: 8,
+    borderRadius: 8,
   },
 });

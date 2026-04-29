@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  Image,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,10 +18,12 @@ import { NeuCard } from '../components/NeuCard';
 import { NeuInput } from '../components/NeuInput';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { BottomSheet } from '../components/BottomSheet';
-import { BackButton } from '../components/BackButton';
 import { useAuth } from '../lib/auth';
 import { colors, fontFamily, fontSize } from '../theme';
 import type { AuthStackParamList } from '../navigation/types';
+import lockImg from '../../assets/Vector-1.png';
+import keyImg from '../../assets/Vector-2.png';
+import Logo from '../../assets/Logo.svg';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'LogIn'>;
 
@@ -55,17 +58,22 @@ export const LogInScreen: React.FC<Props> = ({ navigation }) => {
       >
         <SafeAreaView style={styles.flex} edges={['top']}>
           <View style={styles.header}>
-            <BackButton onPress={() => navigation.goBack()} />
+            <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+              <Logo width={44} height={44} />
+            </Pressable>
           </View>
 
           <View style={styles.illustration}>
             <NeuCard radius={999} style={styles.lockCircle}>
-              <Lock color={colors.primary} size={64} strokeWidth={1.5} />
+              <Image
+                source={lockImg}
+                resizeMode="contain"
+              />
+              <Image
+                source={keyImg}
+                resizeMode="contain"
+              />
             </NeuCard>
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>
-              Log in to pick up where you left off.
-            </Text>
           </View>
 
           <BottomSheet style={styles.sheet}>
@@ -73,6 +81,8 @@ export const LogInScreen: React.FC<Props> = ({ navigation }) => {
               contentContainerStyle={styles.form}
               keyboardShouldPersistTaps="handled"
             >
+              <Text style={styles.title}>Log In</Text>
+
               <NeuInput
                 placeholder="Email"
                 autoCapitalize="none"
@@ -114,7 +124,10 @@ export const LogInScreen: React.FC<Props> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingTop: 8 },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+  },
   illustration: {
     alignItems: 'center',
     paddingTop: 24,
@@ -122,23 +135,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   lockCircle: {
-    width: 120,
-    height: 120,
+    width: 323,
+    height: 323,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 0,
+  },
+  lockImg: {
+    width: 112,
+    height: 152,
+    position: 'absolute',
+  },
+  keyImg: {
+    width: 135,
+    height: 135,
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
   },
   title: {
     fontFamily: fontFamily.bold,
-    fontSize: fontSize.xl,
+    fontSize: 30,
     color: colors.primaryDeep,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontFamily: fontFamily.regular,
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
-    textAlign: 'center',
+    marginBottom: 8,
   },
   sheet: { flex: 1 },
   form: { gap: 16 },

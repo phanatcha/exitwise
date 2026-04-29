@@ -44,6 +44,8 @@ export type MainStackParamList = {
     pickMode: PickMode;
     start?: Station;
   };
+  OnboardingBudget: undefined;
+  OnboardingWalking: undefined;
   TripConfirm: {
     start: Station;
     destination: Station;

@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  Image,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +22,9 @@ import { BackButton } from '../components/BackButton';
 import { useAuth } from '../lib/auth';
 import { colors, fontFamily, fontSize } from '../theme';
 import type { AuthStackParamList } from '../navigation/types';
+import lockImg from '../../assets/Vector-1.png';
+import keyImg from '../../assets/Vector-2.png';
+import Logo from '../../assets/Logo.svg';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 
@@ -69,17 +73,22 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
       >
         <SafeAreaView style={styles.flex} edges={['top']}>
           <View style={styles.header}>
-            <BackButton onPress={() => navigation.goBack()} />
+            <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+              <Logo width={44} height={44} />
+            </Pressable>
           </View>
 
           <View style={styles.illustration}>
             <NeuCard radius={999} style={styles.lockCircle}>
-              <Lock color={colors.primary} size={64} strokeWidth={1.5} />
+              <Image
+                source={lockImg}
+                resizeMode="contain"
+              />
+              <Image
+                source={keyImg}
+                resizeMode="contain"
+              />
             </NeuCard>
-            <Text style={styles.title}>Create your account</Text>
-            <Text style={styles.subtitle}>
-              Start exploring Bangkok, one station at a time.
-            </Text>
           </View>
 
           <BottomSheet style={styles.sheet}>
@@ -149,11 +158,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   lockCircle: {
-    width: 120,
-    height: 120,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+  width: 323,
+  height: 323,
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginBottom: 0,
+  },
+  lockImg: {
+  width: 112,
+  height: 152,
+  position: 'absolute',
+  },
+  keyImg: {
+  width: 135,
+  height: 135,
+  position: 'absolute',
+  bottom: 10,
+  right: 10,
   },
   title: {
     fontFamily: fontFamily.bold,

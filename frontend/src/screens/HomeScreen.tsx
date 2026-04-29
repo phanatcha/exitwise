@@ -305,7 +305,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bgStart },
+  safe: { flex: 1, backgroundColor: '#E6F0F7' },
   topStack: {
     paddingHorizontal: 20,
     paddingTop: 8,
@@ -491,7 +491,6 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 20,
     right: 20,
-    alignItems: 'center',
   },
   modalBackdrop: {
     flex: 1,

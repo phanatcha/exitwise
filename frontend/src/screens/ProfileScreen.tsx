@@ -9,13 +9,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import {
+import { 
+  ChevronRight,
   LogOut,
   Minus,
-  Plus,
-  Sparkles,
-  User as UserIcon,
-  Zap,
+  Plus, 
+  Sparkles, 
+  Zap 
 } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -41,7 +41,7 @@ type Props = NativeStackScreenProps<MainStackParamList, 'Profile'>;
 // onboarding AsyncStorage store so they take effect the next time the AI
 // planner runs — no explicit Save button needed.
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, session } = useAuth();
 
   const [travelMode, setTravelMode] = useState<TravelModePref>('explorer');
   const [budget, setBudget] = useState(500);
@@ -53,7 +53,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      getOnboarding().then((o) => {
+      getOnboarding(session!.user.id).then((o) => {
         if (cancelled) return;
         setTravelMode(o.travel_mode);
         if (o.budget_baht) setBudget(o.budget_baht);
@@ -68,19 +68,19 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
   const pickMode = async (mode: TravelModePref) => {
     setTravelMode(mode);
-    await saveTravelMode(mode);
+    await saveTravelMode(session!.user.id, mode);
   };
 
   const adjustBudget = async (delta: number) => {
     const next = Math.max(100, Math.min(5000, budget + delta));
     setBudget(next);
-    await saveBudget(next);
+    await saveBudget(session!.user.id, next);
   };
 
   const adjustWalking = async (delta: number) => {
     const next = Math.max(100, Math.min(3000, walkingLimit + delta));
     setWalkingLimit(next);
-    await saveWalkingLimit(next);
+    await saveWalkingLimit(session!.user.id, next);
   };
 
   const handleSignOut = () => {
@@ -117,91 +117,85 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
-          <NeuCard radius={24} style={styles.identityCard}>
-            <View style={styles.avatar}>
-              <UserIcon color={colors.primary} size={28} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name} numberOfLines={1}>
-                {emailPrefix}
-              </Text>
-              <Text style={styles.email} numberOfLines={1}>
-                {user?.email ?? 'Not signed in'}
-              </Text>
+          {/* Avatar + identity */}
+          <View style={styles.avatarWrap}>
+            <View style={styles.avatarCircle} />
+            <Text style={styles.name}>{emailPrefix}</Text>
+            <Text style={styles.email}>{user?.email ?? 'Not signed in'}</Text>
+          </View>
+
+          {/* Preferences — Walking & Budget as tappable cards */}
+          <NeuCard radius={24} style={styles.prefCard}>
+            <View style={styles.prefRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.prefTitle}>Walking Distance Limit</Text>
+                <Text style={styles.prefValue}>{walkingLimit} m</Text>
+              </View>
+              <View style={styles.stepper}>
+                <Pressable style={styles.stepBtn} onPress={() => adjustWalking(-100)}>
+                  <Minus color={colors.primaryDeep} size={16} />
+                </Pressable>
+                <Pressable style={styles.stepBtn} onPress={() => adjustWalking(100)}>
+                  <Plus color={colors.primaryDeep} size={16} />
+                </Pressable>
+              </View>
             </View>
           </NeuCard>
 
+          <NeuCard radius={24} style={styles.prefCard}>
+            <View style={styles.prefRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.prefTitle}>Budget</Text>
+                <Text style={styles.prefValue}>{budget} Baht</Text>
+              </View>
+              <View style={styles.stepper}>
+                <Pressable style={styles.stepBtn} onPress={() => adjustBudget(-100)}>
+                  <Minus color={colors.primaryDeep} size={16} />
+                </Pressable>
+                <Pressable style={styles.stepBtn} onPress={() => adjustBudget(100)}>
+                  <Plus color={colors.primaryDeep} size={16} />
+                </Pressable>
+              </View>
+            </View>
+          </NeuCard>
+
+          {/* Travel mode */}
           <Text style={styles.sectionLabel}>Travel mode</Text>
-          <NeuCard radius={24} style={styles.modeCard}>
-            <ModeOption
-              active={travelMode === 'lazy'}
-              Icon={Zap}
-              title="Lazy"
-              subtitle="Shortest walk, one great pick"
+          <View style={styles.modeGrid}>
+            <Pressable
+              style={[styles.modeCard, travelMode === 'lazy' && styles.modeCardActive]}
               onPress={() => pickMode('lazy')}
-            />
-            <View style={styles.divider} />
-            <ModeOption
-              active={travelMode === 'explorer'}
-              Icon={Sparkles}
-              title="Explorer"
-              subtitle="A 2-3 stop walking tour"
+            >
+              <Zap
+                color={travelMode === 'lazy' ? colors.textInverse : colors.primaryDeep}
+                size={28}
+                style={styles.modeCardIcon}
+              />
+              <Text style={[styles.modeCardTitle, travelMode === 'lazy' && styles.modeCardTitleActive]}>
+                Lazy
+              </Text>
+              <Text style={[styles.modeCardSub, travelMode === 'lazy' && styles.modeCardSubActive]}>
+                Closest picks
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.modeCard, travelMode === 'explorer' && styles.modeCardActive]}
               onPress={() => pickMode('explorer')}
-            />
-          </NeuCard>
-
-          <Text style={styles.sectionLabel}>Preferences</Text>
-          <NeuCard radius={24} style={styles.prefsCard}>
-            <View style={styles.prefRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.prefTitle}>Budget per trip</Text>
-                <Text style={styles.prefHint}>
-                  How much you're willing to spend on food & activities.
-                </Text>
-              </View>
-              <View style={styles.stepper}>
-                <Pressable
-                  style={styles.stepBtn}
-                  onPress={() => adjustBudget(-100)}
-                >
-                  <Minus color={colors.primaryDeep} size={16} />
-                </Pressable>
-                <Text style={styles.stepValue}>{budget} ฿</Text>
-                <Pressable
-                  style={styles.stepBtn}
-                  onPress={() => adjustBudget(100)}
-                >
-                  <Plus color={colors.primaryDeep} size={16} />
-                </Pressable>
-              </View>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.prefRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.prefTitle}>Walking limit</Text>
-                <Text style={styles.prefHint}>
-                  Max walking distance between stops.
-                </Text>
-              </View>
-              <View style={styles.stepper}>
-                <Pressable
-                  style={styles.stepBtn}
-                  onPress={() => adjustWalking(-100)}
-                >
-                  <Minus color={colors.primaryDeep} size={16} />
-                </Pressable>
-                <Text style={styles.stepValue}>{walkingLimit} m</Text>
-                <Pressable
-                  style={styles.stepBtn}
-                  onPress={() => adjustWalking(100)}
-                >
-                  <Plus color={colors.primaryDeep} size={16} />
-                </Pressable>
-              </View>
-            </View>
-          </NeuCard>
+            >
+              <Sparkles
+                color={travelMode === 'explorer' ? colors.textInverse : colors.primaryDeep}
+                size={28}
+                style={styles.modeCardIcon}
+              />
+              <Text style={[styles.modeCardTitle, travelMode === 'explorer' && styles.modeCardTitleActive]}>
+                Explorer
+              </Text>
+              <Text style={[styles.modeCardSub, travelMode === 'explorer' && styles.modeCardSubActive]}>
+                More stops & fun
+              </Text>
+            </Pressable>
+          </View>
 
           {loaded ? (
             <PrimaryButton
@@ -222,40 +216,6 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
-interface ModeOptionProps {
-  active: boolean;
-  Icon: React.ComponentType<any>;
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-}
-
-const ModeOption: React.FC<ModeOptionProps> = ({
-  active,
-  Icon,
-  title,
-  subtitle,
-  onPress,
-}) => (
-  <Pressable onPress={onPress} style={styles.modeRow}>
-    <View style={[styles.modeIcon, active && styles.modeIconActive]}>
-      <Icon
-        color={active ? colors.textInverse : colors.primary}
-        size={20}
-      />
-    </View>
-    <View style={{ flex: 1 }}>
-      <Text style={[styles.modeTitle, active && styles.modeTitleActive]}>
-        {title}
-      </Text>
-      <Text style={styles.modeSubtitle}>{subtitle}</Text>
-    </View>
-    <View style={[styles.radioOuter, active && styles.radioOuterActive]}>
-      {active ? <View style={styles.radioInner} /> : null}
-    </View>
-  </Pressable>
-);
-
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   header: {
@@ -265,10 +225,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
   },
-  headerTitleWrap: {
-    flex: 1,
-    alignItems: 'center',
-  },
+  headerTitleWrap: { flex: 1, alignItems: 'center' },
   headerTitle: {
     fontFamily: fontFamily.bold,
     fontSize: fontSize.lg,
@@ -279,26 +236,24 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     gap: 12,
   },
-  identityCard: {
-    flexDirection: 'row',
+
+  // Avatar block
+  avatarWrap: {
     alignItems: 'center',
-    padding: 18,
-    gap: 14,
     marginBottom: 8,
+    gap: 6,
   },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(63, 81, 181, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  avatarCircle: {
+    width: 131,
+    height: 131,
+    borderRadius: 66,
+    backgroundColor: 'rgba(63,81,181,0.15)',
+    marginBottom: 4,
   },
   name: {
     fontFamily: fontFamily.semiBold,
     fontSize: fontSize.md,
     color: colors.primaryDeep,
-    marginBottom: 2,
     textTransform: 'capitalize',
   },
   email: {
@@ -306,114 +261,99 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.textSecondary,
   },
-  sectionLabel: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
-    marginTop: 12,
-    marginLeft: 6,
-    marginBottom: 2,
-  },
-  modeCard: {
-    padding: 8,
-  },
-  modeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    gap: 14,
-  },
-  modeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(63, 81, 181, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modeIconActive: {
-    backgroundColor: colors.primary,
-  },
-  modeTitle: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: fontSize.base,
-    color: colors.primaryDeep,
-  },
-  modeTitleActive: {
-    color: colors.primaryDeep,
-  },
-  modeSubtitle: {
-    fontFamily: fontFamily.regular,
-    fontSize: fontSize.xs,
-    color: colors.textSecondary,
-  },
-  radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: 'rgba(63, 81, 181, 0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioOuterActive: {
-    borderColor: colors.primary,
-  },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.primary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(63, 81, 181, 0.08)',
-    marginHorizontal: 12,
-  },
-  prefsCard: {
-    padding: 8,
+
+  // Pref cards (walking / budget)
+  prefCard: {
+    padding: 0,
+    overflow: 'hidden',
   },
   prefRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    gap: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
   },
   prefTitle: {
     fontFamily: fontFamily.semiBold,
-    fontSize: fontSize.sm,
+    fontSize: fontSize.base,
     color: colors.primaryDeep,
+    marginBottom: 2,
   },
-  prefHint: {
-    fontFamily: fontFamily.regular,
-    fontSize: fontSize.xs,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  stepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(63, 81, 181, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepValue: {
+  prefValue: {
     fontFamily: fontFamily.semiBold,
-    fontSize: fontSize.sm,
+    fontSize: fontSize.base,
+    color: colors.primary,
+  },
+
+  // Section label
+  sectionLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: fontSize.lg,
     color: colors.primaryDeep,
-    minWidth: 64,
+    marginTop: 12,
+    marginLeft: 4,
+  },
+
+  // Mode grid
+  modeGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modeCard: {
+    flex: 1,
+    borderRadius: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'transparent',
+    // neumorphic light (inactive)
+    shadowColor: '#C5C7D1',
+    shadowOffset: { width: 8, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  modeCardActive: {
+    backgroundColor: colors.primaryDeep, // dark fill when selected
+  },
+  modeCardIcon: {
+    marginBottom: 4,
+  },
+  modeCardTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: fontSize.xl,
+    color: colors.primaryDeep,
+  },
+  modeCardTitleActive: {
+    color: colors.textInverse,
+  },
+  modeCardSub: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
+  modeCardSubActive: {
+    color: 'rgba(255,255,255,0.7)',
+  },
+
   navWrap: {
     position: 'absolute',
     left: 20,
     right: 20,
     bottom: 20,
+  },
+  stepper: {
+  flexDirection: 'row',
+  gap: 8,
+},
+stepBtn: {
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  backgroundColor: 'rgba(63, 81, 181, 0.12)',
+  alignItems: 'center',
+  justifyContent: 'center',
   },
 });
